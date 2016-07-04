@@ -39,6 +39,7 @@ float status_publish_interval = 5;
 float killSwitchTimeout = 10;
 std_msgs::Int16 targetDetected; //ID of the detected target
 bool targetsCollected [256] = {0}; //array of booleans indicating whether each target ID has been found
+bool graspingEngaged = false;
 
 // state machine states
 #define STATE_MACHINE_TRANSFORM	0
@@ -165,10 +166,20 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 				else if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2) {
 					stateMachineState = STATE_MACHINE_TRANSLATE; //translate
 				}
-				//If returning with a target
+				//If a target was detected
 				else if (targetDetected.data != -1) {
-					//If goal has not yet been reached
-					if (hypot(0.0 - currentLocation.x, 0.0 - currentLocation.y) > 0.5) {
+					//If gripper is ready to collect a tag
+					if (graspingEngaged) {
+						//actuate gripper to pick up tag
+						std_msgs::Int16 angle;
+						angle.data = 15; //set fingers to 15 degrees
+						fingerAnglePublish.publish(angle);
+						angle.data = 15; //set wrist to 15 degrees
+						wristAnglePublish.publish(angle);
+						graspingEngaged = false; //reset flag
+					}
+					//If center has not yet been reached
+					else if (hypot(0.0 - currentLocation.x, 0.0 - currentLocation.y) > 0.5) {
 				        //set angle to center as goal heading
 						goalLocation.theta = M_PI + atan2(currentLocation.y, currentLocation.x);
 						
@@ -176,8 +187,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 						goalLocation.x = 0.0;
 						goalLocation.y = 0.0;
 					}
-					//Otherwise, reset target and select new random uniform heading
+					//Otherwise, drop off tag, reset target, and select new random uniform heading
 					else {
+						//actuate gripper to drop tag
+						std_msgs::Int16 angle;
+						angle.data = 25; //set fingers to 25 degrees
+						fingerAnglePublish.publish(angle);
+						
 						targetDetected.data = -1;
 						goalLocation.theta = rng->uniformReal(0, 2 * M_PI);
 					}
@@ -278,28 +294,46 @@ void targetHandler(const shared_messages::TagsImage::ConstPtr& message) {
 
 	//if target has not previously been detected 
 	else if (targetDetected.data == -1) {
-        
-        //check if target has not yet been collected
-        if (!targetsCollected[message->tags.data[0]]) {
+		
+		//target on left side of image
+		if (message->centers[0].y < 158) {
+			//select new heading 0.1 radians to the left
+			goalLocation.theta = currentLocation.theta + 0.1;
+		}
+		//target on right side of image
+		else if (message->centers[0].y > 162) {
+			//select new heading 0.1x radians to the right
+			goalLocation.theta = currentLocation.theta - 0.1;
+		}
+		//target is too far ahead
+		else if (message->centers[0].x > 30) {
+			//select new position 2.5 cm ahead
+			goalLocation.x = currentLocation.x + (0.025 * cos(currentLocation.theta));
+			goalLocation.y = currentLocation.y + (0.025 * sin(currentLocation.theta));
+		}
+		//target is in correct position to begin gripping maneuver
+		else {
+			//set gripping position 15 cm ahead
+			goalLocation.x = currentLocation.x + (0.15 * cos(currentLocation.theta));
+			goalLocation.y = currentLocation.y + (0.15 * sin(currentLocation.theta));
+			
 			//copy target ID to class variable
 			targetDetected.data = message->tags.data[0];
 			
-	        //set angle to center as goal heading
-			goalLocation.theta = M_PI + atan2(currentLocation.y, currentLocation.x);
-			
-			//set center as goal position
-			goalLocation.x = 0.0;
-			goalLocation.y = 0.0;
-			
 			//publish detected target
 			targetCollectedPublish.publish(targetDetected);
-
-			//publish to scoring code
-			targetPickUpPublish.publish(message->image);
-
-			//switch to transform state to trigger return to center
-			stateMachineState = STATE_MACHINE_TRANSFORM;
+			
+			//actuate gripper to prepare for collection
+			std_msgs::Int16 angle;
+			angle.data = 90; //set fingers to 90 degrees
+			fingerAnglePublish.publish(angle);
+			angle.data = 50; //set wrist to 50 degrees
+			wristAnglePublish.publish(angle);
+			graspingEngaged = true; //set flag so state machine is aware of action
 		}
+		
+		//switch to transform state to trigger movement
+		stateMachineState = STATE_MACHINE_TRANSFORM;
     }
 }
 
