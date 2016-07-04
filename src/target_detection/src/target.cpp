@@ -4,6 +4,7 @@
 #include <image_transport/image_transport.h>
 
 //ROS messages
+#include <geometry_msgs/Point.h>
 #include <std_msgs/Int16.h>
 #include <sensor_msgs/image_encodings.h>
 
@@ -124,6 +125,10 @@ void targetDetect(const sensor_msgs::ImageConstPtr& rawImage) {
 	    zarray_get(detections, 0, &det); //use the first tag detected in the image
 	    tagDetected.tags.data.push_back(det->id);
 	    tagDetected.image = *rawImage;
+	    geometry_msgs::Point center;
+	    center.x = det->c[1];
+	    center.y = det->c[0];
+	    tagDetected.centers.push_back(center);
 
 	    //Publish detected tag
 	    tagPublish.publish(tagDetected);
