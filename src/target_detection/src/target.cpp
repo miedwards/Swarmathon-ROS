@@ -126,8 +126,8 @@ void targetDetect(const sensor_msgs::ImageConstPtr& rawImage) {
 	    tagDetected.tags.data.push_back(det->id);
 	    tagDetected.image = *rawImage;
 	    geometry_msgs::Point center;
-	    center.x = det->c[1];
-	    center.y = det->c[0];
+	    center.x = det->c[0];
+	    center.y = det->c[1];
 	    tagDetected.centers.push_back(center);
 
 	    //Publish detected tag
