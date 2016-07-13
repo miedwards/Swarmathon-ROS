@@ -151,12 +151,12 @@ void targetDetect(const sensor_msgs::ImageConstPtr& rawImage) {
             tagDetected.corners.push_back(target_corners);
 
             // Stores center coordinates
-            geometry_msgs::Point32 center_coordinates;
+            geometry_msgs::Point center_coordinates;
 
             center_coordinates.x = det->c[0];
             center_coordinates.y = det->c[1];
 
-            tagDetected.centers.points.push_back(center_coordinates);
+            tagDetected.centers.push_back(center_coordinates);
 
         }
         
